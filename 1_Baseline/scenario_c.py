@@ -8,7 +8,11 @@ import os
 import matplotlib.pyplot as plt
 import time
 
-# [Scenario B] Basic + ( Augmentation + Epoch 50 ) + BatchNorm
+# ==================================================================
+# [Scenario C] Scenario B + Network Capacity x2
+# Goal: Demonstrate 'Overfitting' or 'Inefficiency' with large models
+# Expected Result: High training time, Potential overfitting
+# ==================================================================
 BATCH_SIZE = 64
 EPOCHS = 50
 LEARNING_RATE = 0.001
@@ -20,9 +24,9 @@ def main():
     
     # 1. Device Configuration
     device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
-    print(f"Running Scenario B on {device}")
+    print(f"Running Scenario C (Wide Network) on {device}")
 
-    # 2. Data Preprocessing (Augmentation)
+    # 2. Data Preprocessing
     transform = transforms.Compose([
         transforms.RandomCrop(32, padding=4),
         transforms.RandomHorizontalFlip(),
@@ -30,25 +34,27 @@ def main():
         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
     ])
     
-    # Load Datasets (Train=50k, Test=10k)
     trainset = torchvision.datasets.CIFAR10(root='./data', train=True, download=True, transform=transform)
     trainloader = torch.utils.data.DataLoader(trainset, batch_size=BATCH_SIZE, shuffle=True, num_workers=2)
     
     testset = torchvision.datasets.CIFAR10(root='./data', train=False, download=True, transform=transform)
     testloader = torch.utils.data.DataLoader(testset, batch_size=BATCH_SIZE, shuffle=False, num_workers=2)
 
-    # 3. Model Definition (Net with BatchNorm)
-    class NetBN(nn.Module):
+    # 3. Model: WideNetBN (Capacity x2)
+    class WideNetBN(nn.Module):
         def __init__(self):
             super().__init__()
-            self.conv1 = nn.Conv2d(3, 6, 5)
-            self.bn1 = nn.BatchNorm2d(6)    # BN Added
+            # Double the channels: 6->12, 16->32
+            self.conv1 = nn.Conv2d(3, 12, 5)
+            self.bn1 = nn.BatchNorm2d(12)
             self.pool = nn.MaxPool2d(2, 2)
-            self.conv2 = nn.Conv2d(6, 16, 5)
-            self.bn2 = nn.BatchNorm2d(16)   # BN Added
-            self.fc1 = nn.Linear(16 * 5 * 5, 120)
-            self.fc2 = nn.Linear(120, 84)
-            self.fc3 = nn.Linear(84, 10)
+            self.conv2 = nn.Conv2d(12, 32, 5)
+            self.bn2 = nn.BatchNorm2d(32)
+            
+            # Double the FC units
+            self.fc1 = nn.Linear(32 * 5 * 5, 240) # 32 channels
+            self.fc2 = nn.Linear(240, 168)
+            self.fc3 = nn.Linear(168, 10)
 
         def forward(self, x):
             x = self.pool(F.relu(self.bn1(self.conv1(x))))
@@ -59,7 +65,7 @@ def main():
             x = self.fc3(x)
             return x
 
-    model = NetBN().to(device)
+    model = WideNetBN().to(device)
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.SGD(model.parameters(), lr=LEARNING_RATE, momentum=0.9)
 
@@ -67,7 +73,7 @@ def main():
     history = {'train_loss': [], 'test_loss': [], 'test_acc': []}
     
     start_time = time.time()
-    print(f"\n=== Scenario B Training Started (Total: {EPOCHS} Epochs) ===")
+    print(f"\n=== Scenario C Training Started (Total: {EPOCHS} Epochs) ===")
 
     for epoch in range(EPOCHS):
         # [Train Phase]
@@ -92,11 +98,9 @@ def main():
                 inputs, labels = inputs.to(device), labels.to(device)
                 outputs = model(inputs)
                 
-                # Calculate Test Loss
                 loss = criterion(outputs, labels)
                 test_loss_sum += loss.item()
                 
-                # Calculate Accuracy
                 _, predicted = torch.max(outputs.data, 1)
                 total += labels.size(0)
                 correct += (predicted == labels).sum().item()
@@ -114,7 +118,7 @@ def main():
         if (epoch+1) % 5 == 0:
             elapsed = int(time.time() - start_time)
             m, s = divmod(elapsed, 60)
-            print(f"[Scenario B] Epoch {epoch+1}/{EPOCHS} | Train Loss: {avg_train_loss:.4f} | Test Loss: {avg_test_loss:.4f} | Acc: {acc:.2f}% ({m}m {s}s)")
+            print(f"[Scenario C] Epoch {epoch+1}/{EPOCHS} | Train Loss: {avg_train_loss:.4f} | Test Loss: {avg_test_loss:.4f} | Acc: {acc:.2f}% ({m}m {s}s)")
 
     # 5. Save Results
     plt.figure(figsize=(12, 5))
@@ -123,7 +127,7 @@ def main():
     plt.subplot(1, 2, 1)
     plt.plot(history['train_loss'], label='Train Loss', color='blue')
     plt.plot(history['test_loss'], label='Test Loss', color='red', linestyle='--')
-    plt.title('Scenario B: Train vs Test Loss')
+    plt.title('Scenario C: Train vs Test Loss')
     plt.xlabel('Epochs')
     plt.ylabel('Loss')
     plt.legend()
@@ -132,17 +136,17 @@ def main():
     # Plot 2: Accuracy
     plt.subplot(1, 2, 2)
     plt.plot(history['test_acc'], label='Test Accuracy', color='green')
-    plt.title('Scenario B Accuracy')
+    plt.title('Scenario C Accuracy')
     plt.xlabel('Epochs')
     plt.ylabel('Accuracy (%)')
     plt.legend()
     plt.grid(True, alpha=0.3)
 
-    save_path = 'screenshots/scenario_b_graph.png'
+    save_path = 'screenshots/scenario_c_graph.png'
     plt.savefig(save_path)
     
     print("-" * 60)
-    print(f"Scenario B Finished.")
+    print(f"Scenario C Finished.")
     print(f"Final Accuracy: {history['test_acc'][-1]:.2f}%")
     print(f"Total Time: {int(time.time()-start_time)//60}m {int(time.time()-start_time)%60}s")
     print(f"Graph saved to {save_path}")
